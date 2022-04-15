@@ -31,7 +31,7 @@ i_am_employer = types.InlineKeyboardButton(
 start_menu = types.InlineKeyboardMarkup().row(i_am_worker, i_am_employer)
 
 worker_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-worker_menu.add("Искать работу").row("Назад", "Устовить фильтры")
+worker_menu.add("Искать работу").row("Назад", "Установить фильтры")
 
 employer_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 employer_menu.add("Создать вакансию").row("Назад", "Мои вакансии")
@@ -223,10 +223,10 @@ async def cancel(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-@dp.message_handler(Text(equals="Установить фильтры"), state=None)
+@dp.message_handler(Text(equals="Установить фильтры"))
 async def callback(message: types.Message):
     await FilterBot.find.set()
-    await message.reply("Где вы желаете искать работу?"
+    await message.reply("Где вы желаете искать работу?\n"
                         "0 - и бот и freelance.ru\n"
                         "1 - только бот\n"
                         "2 - только freelance.ru\n"
@@ -258,15 +258,15 @@ async def load_discription(message: types.Message, state: FSMContext):
 @dp.message_handler(state=FilterBot.price_max)
 async def load_name(message: types.Message, state: FSMContext):
     async with state.proxy() as new_filter:
-        if message.text in ['0', '1', '2']:
+        try:
             new_filter['salary'] = int(message.text)
             await FilterBot.next()
             await message.reply('Желаете ли вакансии с удаленной/очной работой?\n'
                                 '0 - и удаленная и очная\n'
                                 '1 - только удаленная\n'
                                 '2 - только очная\n')
-        else:
-            await message.reply('Введите только целое число от 0 до 2')
+        except:
+            await message.reply('Введите только целое число')
 
 
 @dp.message_handler(state=FilterBot.remote)
@@ -275,8 +275,15 @@ async def load_name(message: types.Message, state: FSMContext):
         if message.text in ['0', '1', '2']:
             new_filter['link'] = int(message.text)
             await FilterBot.next()
-            data[message.from_user.id]["filters"] = new_filter._data
             print(new_filter._data)
+            new_filter = {
+                "find": new_filter['find'],
+                "price_min": new_filter['discription'],
+                "price_max": new_filter['salary'],
+                "remote": new_filter['link']
+            }
+            data[message.from_user.id]["filters"] = new_filter
+            print(data)
             with open('data_list.json', 'w') as data_list:
                 json.dump(data, data_list, indent=4)
             await message.reply('Фильтры успешно установлены')
@@ -315,23 +322,43 @@ async def callback(call: types.CallbackQuery):
 
 @dp.message_handler(Text(equals="Искать работу"))
 async def get_data_projects(message: types.Message):
+    global data, free_jobs
     data_jobs_from_employers = []
     for k in data:
         v = data[k]
         for i in v["jobs"]:
             data_jobs_from_employers.append(i)
-    data_jobs_from_employers += free_jobs
+    if data[message.from_user.id]['filters']['find'] == 2:
+        data_jobs_from_employers = free_jobs
+    elif data[message.from_user.id]['filters']['find'] == 0:
+        data_jobs_from_employers += free_jobs
 
-    await message.reply(create_job_cart(data_jobs_from_employers[randint(0, len(data_jobs_from_employers))]))
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if job['salary'] >= data[message.from_user.id]['filters']['price_min']]
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if job['salary'] <= data[message.from_user.id]['filters']['price_max']]
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if (data[message.from_user.id]['filters']['remote'] == 0) or (not job['remote'] == data[message.from_user.id]['filters']['remote'])]
+    print(data_jobs_from_employers)
+    if len(data_jobs_from_employers) != 0:
+        await message.reply(create_job_cart(data_jobs_from_employers[randint(0, len(data_jobs_from_employers)-1)]))
+    else:
+        await message.reply('По вашим фильтрам вакансий не найдено')
 
 
 if __name__ == "__main__":
     free_jobs = get_data()
     try:
         with open('data_list.json') as data_list:
-            for k, v in json.load(data_list):
-                data[int(k)] = v
-        print(data)
-    except Exception:
+            load_data = json.load(data_list)
+            for k in load_data:
+                data[int(k)] = load_data[k]
+    except:
         data = {}
+        print("no data")
+
+    print(data)
     executor.start_polling(dp)
+
+
+'''
+with open('data.json', 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False, indent=4)
+'''

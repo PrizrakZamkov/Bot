@@ -335,7 +335,7 @@ async def get_data_projects(message: types.Message):
 
     data_jobs_from_employers = [job for job in data_jobs_from_employers if job['salary'] >= data[message.from_user.id]['filters']['price_min']]
     data_jobs_from_employers = [job for job in data_jobs_from_employers if job['salary'] <= data[message.from_user.id]['filters']['price_max']]
-    data_jobs_from_employers = [job for job in data_jobs_from_employers if (data[message.from_user.id]['filters']['remote'] == 0) or (not job['remote'] == data[message.from_user.id]['filters']['remote'])]
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if (data[message.from_user.id]['filters']['remote'] == 0) or (int(not job['remote']) == data[message.from_user.id]['filters']['remote']-1)]
     print(data_jobs_from_employers)
     if len(data_jobs_from_employers) != 0:
         await message.reply(create_job_cart(data_jobs_from_employers[randint(0, len(data_jobs_from_employers)-1)]))

@@ -1,19 +1,38 @@
 import asyncio
 import json
+import os
 
 from aiogram import Bot, types, Dispatcher, executor
-# from auth_data import token
-from parsing import get_data
+from Bot.parsing import get_data
 from random import randint
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher.filters import Text, Command
 from aiogram.utils.markdown import hbold, hlink
-from auth_data import token
+from Bot.auth_data import token
 
-# bot = Bot(token="5330019151:AAFItAe6I30nsioD5dbpE2wqzV7Cek0yFQg", parse_mode=types.ParseMode.HTML)
+from aiogram.utils.executor import start_webhook
+
+TOKEN = os.getenv('BOT_TOKEN')
 bot = Bot(token=token, parse_mode=types.ParseMode.HTML)
+HEROKU_APP_NAME = os.getenv('HEROKU_APP_NAME')
+
+WEBHOOK_HOST = f'https://{HEROKU_APP_NAME}.herokuapp.com'
+WEBHOOK_PATH = f'/webhook/{TOKEN}'
+WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
+
+WEBAPP_HOST = '0.0.0.0'
+WEBAPP_PORT = os.getenv('PORT', default=8000)
+
+
+async def on_startup(dispatcher):
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+
+
+async def on_shutdown(dispatcher):
+    await bot.delete_webhook()
+
 
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
@@ -309,7 +328,7 @@ async def callback(call: types.CallbackQuery):
     try:
         if call.data and call.data.startswith("delete_"):
             cl = int(call.data.split('_')[1])
-            del data[call.from_user.id]['jobs'][cl-1]
+            del data[call.from_user.id]['jobs'][cl - 1]
             with open('data_list.json', 'w') as data_list:
                 json.dump(data, data_list, indent=4)
             await bot.send_message(call.from_user.id,
@@ -333,17 +352,31 @@ async def get_data_projects(message: types.Message):
     elif data[message.from_user.id]['filters']['find'] == 0:
         data_jobs_from_employers += free_jobs
 
-    data_jobs_from_employers = [job for job in data_jobs_from_employers if job['salary'] >= data[message.from_user.id]['filters']['price_min']]
-    data_jobs_from_employers = [job for job in data_jobs_from_employers if job['salary'] <= data[message.from_user.id]['filters']['price_max']]
-    data_jobs_from_employers = [job for job in data_jobs_from_employers if (data[message.from_user.id]['filters']['remote'] == 0) or (int(not job['remote']) == data[message.from_user.id]['filters']['remote']-1)]
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if
+                                job['salary'] >= data[message.from_user.id]['filters']['price_min']]
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if
+                                job['salary'] <= data[message.from_user.id]['filters']['price_max']]
+    data_jobs_from_employers = [job for job in data_jobs_from_employers if
+                                (data[message.from_user.id]['filters']['remote'] == 0) or (
+                                            int(not job['remote']) == data[message.from_user.id]['filters'][
+                                        'remote'] - 1)]
     print(data_jobs_from_employers)
     if len(data_jobs_from_employers) != 0:
-        await message.reply(create_job_cart(data_jobs_from_employers[randint(0, len(data_jobs_from_employers)-1)]))
+        await message.reply(create_job_cart(data_jobs_from_employers[randint(0, len(data_jobs_from_employers) - 1)]))
     else:
         await message.reply('По вашим фильтрам вакансий не найдено')
 
 
 if __name__ == "__main__":
+    start_webhook(
+        dispatcher=dp,
+        webhook_path=WEBHOOK_PATH,
+        skip_updates=True,
+        on_startup=on_startup,
+        on_shutdown=on_shutdown,
+        host=WEBAPP_HOST,
+        port=WEBAPP_PORT,
+    )
     free_jobs = get_data()
     try:
         with open('data_list.json') as data_list:
@@ -356,7 +389,6 @@ if __name__ == "__main__":
 
     print(data)
     executor.start_polling(dp)
-
 
 '''
 with open('data.json', 'w', encoding='utf-8') as f:
